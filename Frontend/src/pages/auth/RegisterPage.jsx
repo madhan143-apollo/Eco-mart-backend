@@ -61,11 +61,11 @@ export const RegisterPage = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
-    const res = registerSellerBuyer(formData, selectedRole);
+    const res = await registerSellerBuyer(formData, selectedRole);
     if (res.success) {
       if (selectedRole === 'SELLER') {
         navigate('/seller/login');

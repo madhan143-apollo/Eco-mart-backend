@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { apiRequest } from '../lib/api';
 
 const AuthContext = createContext();
 
@@ -128,6 +129,13 @@ export const AuthProvider = ({ children }) => {
   });
 
   const [role, setRole] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('ecoMartUser');
+      const parsedUser = savedUser ? JSON.parse(savedUser) : null;
+      if (parsedUser?.role) return normalizeRole(parsedUser.role);
+    } catch {
+      // Fall back to the legacy role value below.
+    }
     const savedRole = localStorage.getItem('ecoMartRole');
     return normalizeRole(savedRole);
   });
@@ -160,7 +168,7 @@ export const AuthProvider = ({ children }) => {
     }, 4000);
   };
 
-  const registerSellerBuyer = (formData, selectedRole) => {
+  const registerSellerBuyer = async (formData, selectedRole) => {
     const { email, phone } = formData;
     const normalizedSelectedRole = normalizeRole(selectedRole);
 
@@ -169,21 +177,21 @@ export const AuthProvider = ({ children }) => {
       return { success: false, error: "Unauthorized role selection" };
     }
 
-    const existing = users.find(u => u.email?.toLowerCase() === email.toLowerCase() || u.phone === phone);
-    if (existing) {
-      showNotification(`Account already exists with this ${existing.email?.toLowerCase() === email.toLowerCase() ? 'email' : 'phone number'}. Please login.`, 'error');
-      return { success: false, error: "Account already exists" };
-    }
-
     const newUser = {
       id: `user-${normalizedSelectedRole.toLowerCase()}-${Date.now()}`,
       ...formData,
       role: normalizedSelectedRole
     };
 
-    setUsers(prev => [...prev, newUser]);
-    showNotification(`Registration successful as ${normalizedSelectedRole}! Please login.`, 'success');
-    return { success: true, user: newUser };
+    try {
+      const result = await apiRequest('/auth/register', { method: 'POST', body: JSON.stringify(newUser) });
+      setUsers(prev => [...prev, result.user]);
+      showNotification(`Registration successful as ${normalizedSelectedRole}! Please login.`, 'success');
+      return { success: true, user: result.user };
+    } catch (error) {
+      showNotification(error.message, 'error');
+      return { success: false, error: error.message };
+    }
   };
 
   const registerAdmin = (formData) => {
@@ -246,44 +254,18 @@ export const AuthProvider = ({ children }) => {
     return newDriverUser;
   };
 
-  const login = (identifier, password, expectedPortalRole) => {
+  const login = async (identifier, password, expectedPortalRole) => {
     if (!identifier || !password) {
       showNotification("Please enter your login identifier and password.", 'error');
       return { success: false, error: "Missing fields" };
     }
 
-    const cleanIdentifier = identifier.trim().toLowerCase();
-    const cleanPassword = password.trim();
+    try {
+      const result = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ identifier, password, expectedRole: expectedPortalRole }) });
+      const foundUser = result.user;
+      const userNormalizedRole = normalizeRole(foundUser.role);
 
-    // Flexible identifier matching: email, transportId, driverId, id, or phone number!
-    const foundUser = users.find(u => {
-      const matchEmail = u.email?.toLowerCase() === cleanIdentifier;
-      const matchTransportId = u.transportId?.toLowerCase() === cleanIdentifier;
-      const matchDriverId = u.driverId?.toLowerCase() === cleanIdentifier;
-      const matchId = u.id?.toLowerCase() === cleanIdentifier;
-      const matchPhone = u.phone?.replace(/\D/g, '') === cleanIdentifier;
-      
-      const pwdMatches = u.password === cleanPassword;
-      return (matchEmail || matchTransportId || matchDriverId || matchId || matchPhone) && pwdMatches;
-    });
-
-    if (!foundUser) {
-      showNotification(`Invalid credentials for '${identifier}'. Demo Manager: TRM001 / Manager@123 | Demo Driver: DRV001 / Driver@123.`, 'error');
-      return { success: false, error: "Invalid credentials" };
-    }
-
-    const userNormalizedRole = normalizeRole(foundUser.role);
-    const expectedNormalizedRole = normalizeRole(expectedPortalRole);
-
-    if (expectedNormalizedRole && userNormalizedRole !== expectedNormalizedRole) {
-      showNotification(`This account is registered as ${userNormalizedRole}. Please use the ${userNormalizedRole} login portal.`, 'error');
-      return { success: false, error: "Role mismatch" };
-    }
-
-    const updatedUser = {
-      ...foundUser,
-      role: userNormalizedRole
-    };
+      const updatedUser = { ...foundUser, role: userNormalizedRole };
 
     setCurrentUser(updatedUser);
     setRole(userNormalizedRole);
@@ -298,19 +280,33 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('ecoMartUser', JSON.stringify(updatedUser));
     localStorage.setItem('ecoMartRole', userNormalizedRole);
     localStorage.setItem('ecoMartAuth', JSON.stringify(authState));
+    localStorage.setItem('ecoMartToken', result.token);
 
     showNotification(`Welcome back, ${updatedUser.name}! Logged in as ${userNormalizedRole}.`, 'success');
     return { success: true, user: updatedUser };
+    } catch (error) {
+      showNotification(error.message, 'error');
+      return { success: false, error: error.message };
+    }
   };
 
-  const updateUserProfile = (updatedFields) => {
+  const updateUserProfile = async (updatedFields) => {
     if (!currentUser) return;
     const updated = { ...currentUser, ...updatedFields };
     setCurrentUser(updated);
     setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
     localStorage.setItem('ecoMartUser', JSON.stringify(updated));
-    showNotification("Driver Profile updated successfully! ✅", 'success');
-    return updated;
+    try {
+      const result = await apiRequest('/auth/profile', { method: 'PATCH', body: JSON.stringify(updatedFields) });
+      setCurrentUser(result.user);
+      setRole(normalizeRole(result.user.role));
+      localStorage.setItem('ecoMartUser', JSON.stringify(result.user));
+      showNotification("Profile updated successfully!", 'success');
+      return result.user;
+    } catch (error) {
+      showNotification(error.message, 'error');
+      return null;
+    }
   };
 
   const logout = () => {
@@ -319,6 +315,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('ecoMartUser');
     localStorage.removeItem('ecoMartRole');
     localStorage.removeItem('ecoMartAuth');
+    localStorage.removeItem('ecoMartToken');
     showNotification("Logged out successfully.", 'info');
   };
 

@@ -59,11 +59,11 @@ export const AddProductPage = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title || !formData.price || !formData.weightKg) return;
 
-    addProduct(
+    const savedProduct = await addProduct(
       {
         ...formData,
         images: [formData.imageUrl]
@@ -71,7 +71,7 @@ export const AddProductPage = () => {
       currentUser
     );
 
-    navigate('/seller/dashboard');
+    if (savedProduct) navigate('/seller/dashboard');
   };
 
   return (

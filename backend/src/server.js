@@ -7,13 +7,23 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { randomUUID } from 'node:crypto';
+import { schemas } from './models/index.js';
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
 const jwtSecret = process.env.JWT_SECRET || 'waste2worth-development-secret';
-const allowedOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const allowedOrigins = (process.env.CLIENT_ORIGIN || (process.env.VERCEL ? '' : 'http://localhost:5173'))
+  .split(',')
+  .map(value => value.trim())
+  .filter(Boolean);
 app.use(helmet());
-app.use(cors({ origin: allowedOrigin.split(',').map(value => value.trim()), credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS'));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '2mb' }));
 app.use(morgan('dev'));
 
@@ -49,31 +59,42 @@ const id = prefix => `${prefix}-${Date.now()}-${randomUUID().slice(0, 8)}`;
 const findById = (collection, value) => collection.find(item => item.id === value);
 const seedMemory = () => { memory.users = demoUsers.map(user => ({ ...user, password: bcrypt.hashSync(user.password, 10) })); memory.products = [...demoProducts]; memory.partners = [...demoPartners]; memory.fleet = [...demoFleet]; memory.drivers = [...demoDrivers]; };
 
-const schemas = {
-  User: new mongoose.Schema({ id: { type: String, unique: true }, name: String, email: { type: String, lowercase: true, index: true }, phone: String, password: String, role: String, transportId: String, driverId: String, transportCompanyId: String, companyName: String, state: String, city: String, pincode: String, address: String, licenseNumber: String, assignedVehicleNumber: String, avatar: String, rating: Number, tripsCompleted: Number, experienceYears: Number }, { strict: false, timestamps: true }),
-  Product: new mongoose.Schema({ id: { type: String, unique: true }, title: String, category: String, categoryLabel: String, description: String, price: Number, weightKg: Number, sellerId: String, sellerName: String, state: String, city: String, lat: Number, lng: Number, images: [String] }, { strict: false, timestamps: true }),
-  Partner: new mongoose.Schema({ id: { type: String, unique: true }, companyName: String, partnerStatus: String }, { strict: false, timestamps: true }),
-  Fleet: new mongoose.Schema({ id: { type: String, unique: true }, vehicleNumber: String, transportCompanyId: String }, { strict: false, timestamps: true }),
-  Driver: new mongoose.Schema({ id: { type: String, unique: true }, driverId: String, transportCompanyId: String }, { strict: false, timestamps: true }),
-  Order: new mongoose.Schema({ id: { type: String, unique: true }, productId: String, buyerId: String, sellerId: String, status: String, transportRequestStatus: String, transportCompanyId: String, driverId: String, vehicleNumber: String }, { strict: false, timestamps: true })
-};
 let db = null;
 const stores = {};
+let databasePromise;
 async function connectDatabase() {
+  if (db) return;
+  if (databasePromise) return databasePromise;
+  databasePromise = (async () => {
   if (!process.env.MONGODB_URI) { seedMemory(); return; }
   await mongoose.connect(process.env.MONGODB_URI);
   for (const [name, schema] of Object.entries(schemas)) stores[name.toLowerCase()] = mongoose.models[name] || mongoose.model(name, schema);
   if (process.env.SEED_DEMO !== 'false' && await stores.user.countDocuments() === 0) {
-    await stores.user.insertMany(demoUsers.map(user => ({ ...user, password: bcrypt.hashSync(user.password, 10) })));
+    const otherUsers = demoUsers.filter(user => !['SELLER', 'BUYER'].includes(user.role));
+    await stores.user.insertMany(otherUsers.map(user => ({ ...user, password: bcrypt.hashSync(user.password, 10) })));
+    await stores.seller.insertMany(demoUsers.filter(user => user.role === 'SELLER').map(user => ({ ...user, password: bcrypt.hashSync(user.password, 10) })));
+    await stores.buyer.insertMany(demoUsers.filter(user => user.role === 'BUYER').map(user => ({ ...user, password: bcrypt.hashSync(user.password, 10) })));
     await stores.product.insertMany(demoProducts); await stores.partner.insertMany(demoPartners); await stores.fleet.insertMany(demoFleet); await stores.driver.insertMany(demoDrivers);
   }
   db = 'mongo';
+  })();
+  return databasePromise;
 }
+app.use(async (req, res, next) => {
+  try {
+    await connectDatabase();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 const collectionName = type => ({ user: 'users', product: 'products', partner: 'partners', fleet: 'fleet', driver: 'drivers', order: 'orders' })[type];
-const all = async (type, filter = {}) => db ? (await stores[type].find(filter).lean()).map(({ _id, __v, ...item }) => item) : memory[collectionName(type)];
-const one = async (type, filter) => db ? await stores[type].findOne(filter).lean() : memory[collectionName(type)].find(item => Object.entries(filter).every(([key, value]) => item[key] === value));
-const insert = async (type, value) => { if (db) { const saved = await stores[type].create(value); const { _id, __v, ...item } = saved.toObject(); return item; } memory[collectionName(type)].unshift(value); return value; };
-const update = async (type, filter, changes) => { if (db) { const saved = await stores[type].findOneAndUpdate(filter, changes, { new: true }).lean(); return saved; } const collection = memory[collectionName(type)]; const item = collection.find(value => Object.entries(filter).every(([key, val]) => value[key] === val)); if (item) Object.assign(item, changes); return item; };
+const stripMongoFields = item => { if (!item) return item; const { _id, __v, ...safe } = item; return safe; };
+const userStore = role => role === 'SELLER' ? stores.seller : role === 'BUYER' ? stores.buyer : stores.user;
+const all = async (type, filter = {}) => db ? (type === 'user' ? (await Promise.all([stores.user.find(filter).lean(), stores.seller.find(filter).lean(), stores.buyer.find(filter).lean()])).flat().map(stripMongoFields) : (await stores[type].find(filter).lean()).map(stripMongoFields)) : memory[collectionName(type)];
+const one = async (type, filter) => db ? (type === 'user' ? (await all(type, filter))[0] : stripMongoFields(await stores[type].findOne(filter).lean())) : memory[collectionName(type)].find(item => Object.entries(filter).every(([key, value]) => item[key] === value));
+const insert = async (type, value) => { if (db) { const model = type === 'user' ? userStore(value.role) : stores[type]; const saved = await model.create(value); return stripMongoFields(saved.toObject()); } memory[collectionName(type)].unshift(value); return value; };
+const update = async (type, filter, changes) => { if (db) { const model = type === 'user' ? userStore(changes.role || (await one(type, filter))?.role) : stores[type]; const saved = await model.findOneAndUpdate(filter, changes, { new: true }).lean(); return stripMongoFields(saved); } const collection = memory[collectionName(type)]; const item = collection.find(value => Object.entries(filter).every(([key, val]) => value[key] === val)); if (item) Object.assign(item, changes); return item; };
 const remove = async (type, filter) => { if (db) return stores[type].findOneAndDelete(filter); const collection = memory[collectionName(type)]; const index = collection.findIndex(value => Object.entries(filter).every(([key, val]) => value[key] === val)); if (index >= 0) collection.splice(index, 1); };
 
 const auth = (req, res, next) => { try { const token = req.headers.authorization?.replace('Bearer ', ''); if (!token) return res.status(401).json({ error: 'Authentication required' }); req.user = jwt.verify(token, jwtSecret); next(); } catch { res.status(401).json({ error: 'Invalid or expired token' }); } };
@@ -112,4 +133,8 @@ app.get('/api/impact', auth, async (req, res, next) => { try { res.json(memory.i
 app.get('/api/dashboard', auth, async (req, res, next) => { try { const [users, products, orders, partners, fleet] = await Promise.all([all('user'), all('product'), all('order'), all('partner'), all('fleet')]); res.json({ users: users.length, products: products.length, orders: orders.length, partners: partners.length, fleetVehicles: fleet.length, environmentalImpact: memory.impact }); } catch (error) { next(error); } });
 app.use((error, req, res, next) => { console.error(error); res.status(500).json({ error: 'Internal server error' }); });
 
-connectDatabase().then(() => app.listen(port, () => console.log(`Waste2Worth API listening on http://localhost:${port}/api`))).catch(error => { console.error('Database startup failed:', error.message); process.exit(1); });
+export default app;
+
+if (!process.env.VERCEL) {
+  connectDatabase().then(() => app.listen(port, () => console.log(`Waste2Worth API listening on http://localhost:${port}/api`))).catch(error => { console.error('Database startup failed:', error.message); process.exit(1); });
+}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, Store, ShoppingBag, Shield, Truck, User, Compass } from 'lucide-react';
+import { ExternalLink, Store, ShoppingBag, Shield, Truck, User } from 'lucide-react';
 
 const PORTAL_ITEMS = [
   {
@@ -49,27 +49,7 @@ export const DemoCredentialsBox = ({ className = "" }) => {
   const navigate = useNavigate();
 
   return (
-    <div className={`bg-slate-900/95 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-emerald-500/40 shadow-2xl space-y-3.5 text-white ${className}`}>
-      {/* Box Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
-            <Compass className="w-4 h-4" />
-          </div>
-          <div>
-            <h4 className="font-black text-xs uppercase tracking-wider text-emerald-300">
-              ECO MART Role Portals
-            </h4>
-            <p className="text-[10px] text-slate-400">Direct portal navigation for all marketplace roles</p>
-          </div>
-        </div>
-        <span className="px-2 py-0.5 text-[9px] font-mono font-black bg-emerald-950 text-emerald-400 rounded-full border border-emerald-500/30 uppercase">
-          India v2.5
-        </span>
-      </div>
-
-      {/* Portal Navigation Items Grid */}
-      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+    <div className={`space-y-2 pr-1 text-white ${className}`}>
         {PORTAL_ITEMS.map((item, idx) => {
           const Icon = item.icon;
           return (
@@ -98,12 +78,6 @@ export const DemoCredentialsBox = ({ className = "" }) => {
             </div>
           );
         })}
-      </div>
-
-      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-        <span>Click Login to navigate to any role portal</span>
-        <span className="text-emerald-400 font-bold">ECO MART Platform</span>
-      </div>
     </div>
   );
 };

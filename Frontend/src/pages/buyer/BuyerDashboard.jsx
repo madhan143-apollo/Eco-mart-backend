@@ -37,8 +37,8 @@ export const BuyerDashboard = () => {
 
   const myOrders = orders.filter(o => o.buyerId === currentUser?.id || o.buyerName === currentUser?.name);
 
-  const handleBuyNow = (product) => {
-    placeOrder(product, currentUser);
+  const handleBuyNow = async (product) => {
+    await placeOrder(product, currentUser);
     setSelectedProductForModal(null);
   };
 

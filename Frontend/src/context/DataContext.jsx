@@ -9,11 +9,12 @@ import {
   ECO_CATEGORIES
 } from '../data/initialData';
 import { useAuth } from './AuthContext';
+import { apiRequest } from '../lib/api';
 
 const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
-  const { showNotification } = useAuth();
+  const { showNotification, currentUser } = useAuth();
 
   const [products, setProducts] = useState(() => {
     try {
@@ -72,6 +73,11 @@ export const DataProvider = ({ children }) => {
   const [appNotifications, setAppNotifications] = useState([]);
 
   useEffect(() => {
+    apiRequest('/products').then(setProducts).catch(() => {});
+    if (currentUser && localStorage.getItem('ecoMartToken')) apiRequest('/orders').then(setOrders).catch(() => {});
+  }, [currentUser]);
+
+  useEffect(() => {
     localStorage.setItem('ecoMartProducts', JSON.stringify(products));
   }, [products]);
 
@@ -109,7 +115,7 @@ export const DataProvider = ({ children }) => {
   };
 
   // Product Actions
-  const addProduct = (newProdData, seller) => {
+  const addProduct = async (newProdData, seller) => {
     const categoryObj = ECO_CATEGORIES.find(c => c.id === newProdData.category);
     const newProd = {
       id: `PROD-${Math.floor(100 + Math.random() * 900)}`,
@@ -136,9 +142,15 @@ export const DataProvider = ({ children }) => {
       createdAt: new Date().toISOString().split('T')[0]
     };
 
-    setProducts(prev => [newProd, ...(prev || [])]);
-    showNotification("New product listing published successfully!", 'success');
-    return newProd;
+    try {
+      const savedProduct = await apiRequest('/products', { method: 'POST', body: JSON.stringify(newProd) });
+      setProducts(prev => [savedProduct, ...(prev || [])]);
+      showNotification("New product listing published successfully!", 'success');
+      return savedProduct;
+    } catch (error) {
+      showNotification(error.message, 'error');
+      return null;
+    }
   };
 
   const deleteProduct = (prodId) => {
@@ -157,6 +169,7 @@ export const DataProvider = ({ children }) => {
       ...partnerData
     };
     setPartners(prev => [newPartner, ...(prev || [])]);
+    apiRequest('/partners', { method: 'POST', body: JSON.stringify(newPartner) }).catch(error => showNotification(error.message, 'error'));
 
     addNotificationAlert(
       "Partnership Invitation Sent",
@@ -170,6 +183,7 @@ export const DataProvider = ({ children }) => {
 
   const updatePartnerStatus = (partnerId, status) => {
     setPartners(prev => (prev || []).map(p => p.id === partnerId ? { ...p, partnerStatus: status } : p));
+    apiRequest(`/partners/${partnerId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }).catch(error => showNotification(error.message, 'error'));
     showNotification(`Partner status updated to ${status}`, 'info');
   };
 
@@ -186,6 +200,7 @@ export const DataProvider = ({ children }) => {
       ...vehicleData
     };
     setFleetVehicles(prev => [newVeh, ...(prev || [])]);
+    apiRequest('/fleet', { method: 'POST', body: JSON.stringify(newVeh) }).catch(error => showNotification(error.message, 'error'));
     showNotification(`Vehicle ${newVeh.vehicleNumber} added to company fleet!`, 'success');
     return newVeh;
   };
@@ -202,12 +217,13 @@ export const DataProvider = ({ children }) => {
       ...driverData
     };
     setCompanyDrivers(prev => [newDriver, ...(prev || [])]);
+    apiRequest('/drivers', { method: 'POST', body: JSON.stringify(newDriver) }).catch(error => showNotification(error.message, 'error'));
     showNotification(`Driver ${newDriver.name} onboarded successfully!`, 'success');
     return newDriver;
   };
 
   // Marketplace Order Placement
-  const placeOrder = (product, buyer, quantityKg = null) => {
+  const placeOrder = async (product, buyer, quantityKg = null) => {
     const weight = quantityKg || product.weightKg;
     const price = Math.round((product.price / product.weightKg) * weight);
 
@@ -242,12 +258,19 @@ export const DataProvider = ({ children }) => {
       createdAt: new Date().toLocaleString()
     };
 
-    setOrders(prev => [newOrder, ...(prev || [])]);
-    showNotification(`Order ${newOrder.id} placed! Waiting for Seller confirmation.`, 'success');
-    return newOrder;
+    try {
+      const savedOrder = await apiRequest('/orders', { method: 'POST', body: JSON.stringify(newOrder) });
+      setOrders(prev => [savedOrder, ...(prev || [])]);
+      showNotification(`Order ${savedOrder.id} placed! Waiting for Seller confirmation.`, 'success');
+      return savedOrder;
+    } catch (error) {
+      showNotification(error.message, 'error');
+      return null;
+    }
   };
 
   const updateOrderStatus = (orderId, newStatus, extraData = {}) => {
+    apiRequest(`/orders/${orderId}/status`, { method: 'PATCH', body: JSON.stringify({ status: newStatus, ...extraData }) }).catch(error => showNotification(error.message, 'error'));
     setOrders(prev => (prev || []).map(ord => {
       if (ord.id === orderId) {
         const updated = {

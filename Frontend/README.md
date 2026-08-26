@@ -1,5 +1,9 @@
 # React + Vite
 
+## API configuration
+
+Set `VITE_API_URL` to the backend API URL. Locally it defaults to `http://localhost:5000/api`; for Vercel, set it to the deployed backend URL ending in `/api`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

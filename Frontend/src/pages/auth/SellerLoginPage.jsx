@@ -11,16 +11,16 @@ export const SellerLoginPage = () => {
   const [email, setEmail] = useState('seller@ecomart.in');
   const [password, setPassword] = useState('Seller@123');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = login(email, password, 'SELLER');
+    const res = await login(email, password, 'SELLER');
     if (res.success) {
       navigate('/seller/dashboard');
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen overflow-y-auto bg-slate-950 flex flex-col items-center justify-start p-4 sm:py-8">
       <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-slate-200">
         <div className="flex flex-col items-center text-center mb-6">
           <EcoMartLogo size="md" showTagline={true} className="mb-4" />

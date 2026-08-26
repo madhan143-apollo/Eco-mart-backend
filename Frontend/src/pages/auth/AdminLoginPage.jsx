@@ -11,16 +11,16 @@ export const AdminLoginPage = () => {
   const [email, setEmail] = useState('admin@ecomart.in');
   const [password, setPassword] = useState('Admin@123');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = login(email, password, 'ADMIN');
+    const res = await login(email, password, 'ADMIN');
     if (res.success) {
       navigate('/admin/dashboard');
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen overflow-y-auto bg-slate-950 flex flex-col items-center justify-start p-4 sm:py-8">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-white">
         <div className="flex flex-col items-center text-center mb-6">
           <EcoMartLogo size="md" showTagline={true} className="mb-4" />
