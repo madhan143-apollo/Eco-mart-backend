@@ -2,7 +2,7 @@
 
 ## API configuration
 
-Set `VITE_API_URL` to the backend API URL. Locally it defaults to `http://localhost:5000/api`; for Vercel, set it to the deployed backend URL ending in `/api`.
+Set `VITE_API_URL` to the backend API URL. Locally it defaults to `http://localhost:5000/api`; in Netlify, set it to the Railway URL ending in `/api`, for example `https://your-backend.up.railway.app/api`.
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

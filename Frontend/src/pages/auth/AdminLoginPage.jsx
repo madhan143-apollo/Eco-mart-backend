@@ -20,7 +20,7 @@ export const AdminLoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-slate-950 flex flex-col items-center justify-start p-4 sm:py-8">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-white">
         <div className="flex flex-col items-center text-center mb-6">
           <EcoMartLogo size="md" showTagline={true} className="mb-4" />

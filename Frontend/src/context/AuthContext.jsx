@@ -129,13 +129,6 @@ export const AuthProvider = ({ children }) => {
   });
 
   const [role, setRole] = useState(() => {
-    try {
-      const savedUser = localStorage.getItem('ecoMartUser');
-      const parsedUser = savedUser ? JSON.parse(savedUser) : null;
-      if (parsedUser?.role) return normalizeRole(parsedUser.role);
-    } catch {
-      // Fall back to the legacy role value below.
-    }
     const savedRole = localStorage.getItem('ecoMartRole');
     return normalizeRole(savedRole);
   });
@@ -299,7 +292,6 @@ export const AuthProvider = ({ children }) => {
     try {
       const result = await apiRequest('/auth/profile', { method: 'PATCH', body: JSON.stringify(updatedFields) });
       setCurrentUser(result.user);
-      setRole(normalizeRole(result.user.role));
       localStorage.setItem('ecoMartUser', JSON.stringify(result.user));
       showNotification("Profile updated successfully!", 'success');
       return result.user;
