@@ -12,15 +12,17 @@ import { schemas } from './models/index.js';
 const app = express();
 const port = Number(process.env.PORT || 5000);
 const jwtSecret = process.env.JWT_SECRET || 'waste2worth-development-secret';
-const allowedOrigins = (process.env.CLIENT_ORIGIN || (process.env.VERCEL ? '' : 'http://localhost:5173'))
-  .split(',')
-  .map(value => value.trim())
-  .filter(Boolean);
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  ...(process.env.FRONTEND_URL || '').split(','),
+  ...(process.env.CLIENT_ORIGIN || '').split(',')
+].map(value => value.trim()).filter(Boolean);
 app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Origin is not allowed by CORS'));
+    return callback(new Error('CORS origin not allowed'));
   },
   credentials: true
 }));
@@ -102,6 +104,7 @@ const roles = (...allowed) => (req, res, next) => allowed.includes(req.user.role
 const issueToken = user => jwt.sign({ id: user.id, role: user.role, transportCompanyId: user.transportCompanyId || null }, jwtSecret, { expiresIn: '7d' });
 const roleMatches = (user, identifier) => [user.email, user.id, user.transportId, user.driverId, user.phone?.replace(/\D/g, '')].filter(Boolean).some(value => value.toLowerCase?.() === identifier.toLowerCase() || value === identifier.replace(/\D/g, ''));
 
+app.get('/api', (req, res) => res.json({ success: true, message: 'WASTE2WORTH backend is running' }));
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'waste2worth-api', database: db ? 'mongodb' : 'memory', time: new Date().toISOString() }));
 app.post('/api/auth/register', async (req, res, next) => { try { const { name, email, phone, password, role = 'BUYER', ...profile } = req.body; const normalized = role.toUpperCase(); if (!['SELLER', 'BUYER'].includes(normalized)) return res.status(400).json({ error: 'Public registration is limited to sellers and buyers' }); if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password are required' }); if (await one('user', { email: email.toLowerCase() })) return res.status(409).json({ error: 'Account already exists' }); const user = await insert('user', { id: id('user'), name, email: email.toLowerCase(), phone, password: await bcrypt.hash(password, 10), role: normalized, ...profile }); res.status(201).json({ user: cleanUser(user), token: issueToken(user) }); } catch (error) { next(error); } });
 app.post('/api/auth/admin/register', async (req, res, next) => { try { const { name, email, phone, password, ...profile } = req.body; if (await one('user', { email: email.toLowerCase() })) return res.status(409).json({ error: 'Email already registered' }); const user = await insert('user', { id: id('user-admin'), name, email: email.toLowerCase(), phone, password: await bcrypt.hash(password, 10), role: 'ADMIN', ...profile }); res.status(201).json({ user: cleanUser(user), token: issueToken(user) }); } catch (error) { next(error); } });
@@ -136,5 +139,5 @@ app.use((error, req, res, next) => { console.error(error); res.status(500).json(
 export default app;
 
 if (!process.env.VERCEL) {
-  connectDatabase().then(() => app.listen(port, () => console.log(`Waste2Worth API listening on http://localhost:${port}/api`))).catch(error => { console.error('Database startup failed:', error.message); process.exit(1); });
+  connectDatabase().then(() => app.listen(port, '0.0.0.0', () => console.log(`Waste2Worth API listening on http://0.0.0.0:${port}/api`))).catch(error => { console.error('Database startup failed:', error.message); process.exit(1); });
 }
