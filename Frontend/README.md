@@ -4,6 +4,15 @@
 
 Set `VITE_API_URL` to the backend API URL. Locally it defaults to `http://localhost:5000/api`; in Netlify, set it to the Railway URL ending in `/api`, for example `https://your-backend.up.railway.app/api`.
 
+## Netlify deployment
+
+- Base directory: `Frontend`
+- Build command: `npm run build`
+- Publish directory: `dist`
+- Environment variable: `VITE_API_URL=https://your-backend.up.railway.app/api`
+
+The included `netlify.toml` preserves React Router routes when a page is refreshed.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:
